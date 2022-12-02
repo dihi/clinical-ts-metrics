@@ -27,7 +27,7 @@ def get_prediction_level_metrics(positive_prediction_times, detection_window, ev
     return num_tp, num_fp
 
 
-def get_metrics(trajectory_list, thresholds: List[float], snooze_window, detection_window):
+def get_metrics(trajectory_list, thresholds, snooze_window, detection_window):
     """
     Returns
     -------

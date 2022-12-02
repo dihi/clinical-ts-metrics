@@ -1,0 +1,4 @@
+benchmark_data/
+src/process_trajectories
+*__pycache__*
+*checkpoint*
