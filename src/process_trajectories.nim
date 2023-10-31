@@ -1,6 +1,7 @@
 import std/json
 import std/lenientops
 import std/terminal
+import std/sequtils
 import times, strutils
 import arraymancer
 import argParse
@@ -13,12 +14,14 @@ var parser = newParser:
     option("-n", "--numthresholds", help="The number of thresholds to consider. Creates an equally-spaced array from 0 to 1.", default=some("100"))
     option("-d", "--detectionwindow", help="Size of detection window")
     option("-s", "--snoozewindow", help="Size of the snoozing window")
+    flag("-a", "--allthresholds")
     
 var inputfile: string
 var outputfile: string
 var granularity: int
 var detectionwindow: float
 var snoozewindow: float
+var allthresholds: bool
 
 try:
     let opts = parser.parse()
@@ -42,6 +45,7 @@ try:
         granularity = parseInt(opts.numthresholds)
         detectionwindow = parseFloat(opts.detectionwindow)
         snoozewindow = parseFloat(opts.snoozewindow)
+        allthresholds = opts.allthresholds
 
 except ShortCircuit:
     echo parser.help
@@ -71,9 +75,7 @@ proc get_prediction_level_metrics(positive_prediction_times: seq[float], detecti
     return (num_tp, num_fp)
 
 
-let THRESHOLDS=linspace(0, 1, granularity)
 let trajectoryDataStr = readFile(inputfile)
-
 type Trajectory = object
     event_occurred: bool
     event_time: float
@@ -82,14 +84,28 @@ type Trajectory = object
 
 let trajectoryData = parseJson(trajectoryDataStr)
 var trajectories: seq[Trajectory]
+var uniqueThresholds: seq[float]
 for res in trajectoryData:
-    trajectories.add(res.to(Trajectory))
+    let traj = res.to(Trajectory)
+    trajectories.add(traj)
+    if allthresholds == true:
+        uniqueThresholds.add(traj.predicted_risks)
+
+var THRESHOLDS: seq[float] = @[]
+if allthresholds == true:
+    sort(uniqueThresholds)
+    THRESHOLDS = deduplicate(uniqueThresholds, isSorted=true)
+    echo THRESHOLDS.len() 
+
+else:
+    THRESHOLDS= linspace(0, 1, granularity).toSeq1D()
 
 # Serialize the result to json
 var output: seq[JsonNode]
 let time = epochTime()
 var bar: SuruBar = initSuruBar()
-bar[0].total = THRESHOLDS.shape[0] # number of iterations
+
+bar[0].total = len(THRESHOLDS)
 bar.setup()
 
 for thresh in THRESHOLDS:
