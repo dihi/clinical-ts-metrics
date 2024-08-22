@@ -63,8 +63,8 @@ if __name__ == '__main__':
     with open("../benchmark_data/benchmark_trajectories_200.json", "w") as f:
         json.dump(traj_list[0:200], f, indent=2)
 
-    with open("./benchmark_data/benchmark_trajectories_2000.json", "w") as f:
+    with open("../benchmark_data/benchmark_trajectories_2000.json", "w") as f:
         json.dump(traj_list[0:2000], f, indent=2)
         
-    with open("./benchmark_data/benchmark_trajectories_20000.json", "w") as f:
+    with open("../benchmark_data/benchmark_trajectories_20000.json", "w") as f:
         json.dump(traj_list, f, indent=2)

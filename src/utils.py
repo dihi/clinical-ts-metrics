@@ -1,3 +1,4 @@
+from typing import List
 """
 Contains the python implementation of code to process trajectories provided in the 
 format described in this library
