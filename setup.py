@@ -1,23 +1,24 @@
 from setuptools import setup, Extension
-import sysconfig
-
-# Compile with optimization flags for performance
-extra_compile_args = ['-O3', '-march=native', '-flto']
-extra_link_args = ['-flto']
 
 # Define the extension module
 process_trajectories_module = Extension(
-      'process_trajectories',
-      sources=['src/process_trajectories_module.c'],
-      include_dirs=[sysconfig.get_path('include')],
-      extra_compile_args=extra_compile_args,
-      extra_link_args=extra_link_args,
+    'process_trajectories',
+    sources=[
+        'src/process_trajectories.c',
+        'src/process_trajectories_module.c',
+    ],
+    include_dirs=[
+        '/Users/michaelgao/miniconda3/envs/dspy39/include/python3.9',
+        'src/include',
+
+    ],
+    extra_compile_args=['-O3', '-march=native', '-flto'],
+    extra_link_args=['-flto', '-g'],
 )
 
-# Setup script
+# Setup the package
 setup(
-      name='process_trajectories',
-      version='1.0',
-      description='Process trajectories and calculate metrics',
-      ext_modules=[process_trajectories_module],
+    name='clinical_ts_metrics',
+    version='1.0',
+    ext_modules=[process_trajectories_module]
 )
