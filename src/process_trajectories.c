@@ -4,6 +4,7 @@
 #include <math.h>
 #include <Python.h>
 #include "process_trajectories.h"
+#include <time.h>
 
 
 void free_trajectory(Trajectory *traj) {
@@ -267,7 +268,6 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
         PyErr_SetString(PyExc_ValueError, "Invalid number of trajectories");
         return -1;
     }
-    printf("Number of trajectories: %d\n", num_trajectories); // Debug statement
     
     Trajectory *trajectories = (Trajectory *)malloc(num_trajectories * sizeof(Trajectory));
     if (trajectories == NULL) {
@@ -275,11 +275,11 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
         return -1;
     }
 
+    // Process all trajectories
     for (int i = 0; i < num_trajectories; i++) {
         PyObject *traj_obj = PyList_GetItem(trajectories_obj, i);
         if (traj_obj == NULL) {
             PyErr_SetString(PyExc_IndexError, "Invalid trajectory object index");
-            
             free(trajectories);
             return -1;
         }
@@ -287,6 +287,7 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
             free(trajectories);
             return -1;
         }
+
     }
 
     if (snooze_window == 0) {
@@ -315,6 +316,12 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
 
         qsort(risk_scores, risk_scores_count, sizeof(double), compare_risk_scores);
 
+        // Add timing variables
+        clock_t start, current;
+        double cpu_time_used;
+        start = clock();
+
+        int print_interval = risk_scores_count / 10;  // Print 10 updates
         for (int t = 0; t < risk_scores_count; t++) {
             double threshold = risk_scores[t];
 
@@ -362,7 +369,18 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
                                                   "prediction_tp", prediction_tp,
                                                   "prediction_fp", prediction_fp);
             PyList_Append(result_list, result_dict);
-            Py_DECREF(result_dict);  // Decrease reference count
+            Py_DECREF(result_dict);
+
+            // Print progress and time estimation
+            if (t > 0 && t % print_interval == 0) {
+                current = clock();
+                cpu_time_used = ((double) (current - start)) / CLOCKS_PER_SEC;
+                double progress = (double)(t + 1) / risk_scores_count;
+                double estimated_total_time = cpu_time_used / progress;
+                double estimated_remaining = estimated_total_time - cpu_time_used;
+                printf("Processed %d of %d risk scores (%.1f%%). Estimated time remaining: %.2f seconds\n", 
+                       t + 1, risk_scores_count, progress * 100, estimated_remaining);
+            }
         }
 
         free(risk_scores);

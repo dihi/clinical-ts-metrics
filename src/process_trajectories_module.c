@@ -1,7 +1,7 @@
 #include <Python.h>
 
 // Forward declaration of the process_trajectories function
-int process_trajectories(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list);
+int process_trajectories(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity);
 
 // Helper function to convert Python list or tuple to C array
 int convert_to_c_array(PyObject *input, double **output, int *len) {
@@ -77,12 +77,12 @@ static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObjec
     PyObject *trajectories;
     PyObject *snooze_window_obj;
     PyObject *detection_window_obj;
-    double snooze_window;
-    double detection_window;
+    int verbosity = 1;  // Default verbosity level
+    double snooze_window, detection_window;
 
-    static char *kwlist[] = {"trajectories", "snooze_window", "detection_window", NULL};
+    static char *kwlist[] = {"trajectories", "snooze_window", "detection_window", "verbosity", NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOO", kwlist, &trajectories, &snooze_window_obj, &detection_window_obj)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OOO|i", kwlist, &trajectories, &snooze_window_obj, &detection_window_obj, &verbosity)) {
         return NULL;
     }
 
@@ -103,7 +103,7 @@ static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObjec
         return PyErr_NoMemory();
     }
 
-    if (process_trajectories(trajectories, snooze_window, detection_window, result_list) == -1) {
+    if (process_trajectories(trajectories, snooze_window, detection_window, result_list, verbosity) == -1) {
         Py_DECREF(result_list);
         return NULL;
     }
@@ -132,9 +132,6 @@ PyMODINIT_FUNC PyInit_process_trajectories(void) {
     if (m == NULL) {
         return NULL;
     }
-    
-    // Initialize Python's threads
-    PyEval_InitThreads();
     
     return m;
 }
