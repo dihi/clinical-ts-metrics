@@ -3,7 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <Python.h>
-#include "process_trajectories.h"
+#include "ctseval.h"
 #include <time.h>
 
 
@@ -120,7 +120,7 @@ int compare_risk_scores(const void *a, const void *b) {
     return (diff > 0) - (diff < 0);
 }
 
-void get_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, double detection_window, PyObject *result_list) {
+void compute_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, double detection_window, PyObject *result_list) {
     if (num_trajectories <= 0) {
         PyErr_SetString(PyExc_ValueError, "Invalid number of trajectories");
         return;
@@ -262,7 +262,7 @@ void get_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, doubl
     free(positive_prediction_episodes);
     free(negative_prediction_episodes);
 }
-int process_trajectories(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity) {
+int compute_metrics(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity) {
     int num_trajectories = PyList_Size(trajectories_obj);
     if (num_trajectories < 0) {
         PyErr_SetString(PyExc_ValueError, "Invalid number of trajectories");
@@ -291,7 +291,7 @@ int process_trajectories(PyObject *trajectories_obj, double snooze_window, doubl
     }
 
     if (snooze_window == 0) {
-        get_metrics_no_snooze(trajectories, num_trajectories, detection_window, result_list);
+        compute_metrics_no_snooze(trajectories, num_trajectories, detection_window, result_list);
     } else {
         double *risk_scores = NULL;
         int risk_scores_count = 0;

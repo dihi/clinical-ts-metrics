@@ -1,5 +1,6 @@
-#ifndef PROCESS_TRAJECTORIES_H
-#define PROCESS_TRAJECTORIES_H
+#include <Python.h>
+#ifndef CTSEVAL_H
+#define CTSEVAL_H
 
 typedef struct {
     int len;
@@ -16,9 +17,8 @@ typedef struct {
 } RiskScore;
 
 int convert_to_trajectory(PyObject *traj_obj, Trajectory *traj);
-int process_trajectories(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity);
-void get_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, double detection_window, PyObject *result_list);
+int compute_metrics(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity);
 int compare_risk_scores(const void *a, const void *b);
 int convert_to_c_array(PyObject *input, double **output, int *len);
 
-#endif // PROCESS_TRAJECTORIES_H
+#endif // CTSEVAL_H

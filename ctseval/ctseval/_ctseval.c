@@ -1,7 +1,7 @@
 #include <Python.h>
 
 // Forward declaration of the process_trajectories function
-int process_trajectories(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity);
+int compute_metrics(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity);
 
 // Helper function to convert Python list or tuple to C array
 int convert_to_c_array(PyObject *input, double **output, int *len) {
@@ -72,8 +72,8 @@ int convert_to_c_array(PyObject *input, double **output, int *len) {
     return 0;
 }
 
-// Wrapper function for process_trajectories
-static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObject* kwargs) {
+// Rename the Python-callable C function
+static PyObject* py_compute_metrics_c(PyObject* self, PyObject* args, PyObject* kwargs) {
     PyObject *trajectories;
     PyObject *snooze_window_obj;
     PyObject *detection_window_obj;
@@ -86,13 +86,25 @@ static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObjec
         return NULL;
     }
 
-    if (!PyFloat_Check(snooze_window_obj) || !PyFloat_Check(detection_window_obj)) {
-        PyErr_SetString(PyExc_TypeError, "snooze_window and detection_window must be floats");
+    // Handle both float and int for snooze_window
+    if (PyFloat_Check(snooze_window_obj)) {
+        snooze_window = PyFloat_AsDouble(snooze_window_obj);
+    } else if (PyLong_Check(snooze_window_obj)) {
+        snooze_window = (double)PyLong_AsLong(snooze_window_obj);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "snooze_window must be a float or int");
         return NULL;
     }
 
-    snooze_window = PyFloat_AsDouble(snooze_window_obj);
-    detection_window = PyFloat_AsDouble(detection_window_obj);
+    // Handle both float and int for detection_window
+    if (PyFloat_Check(detection_window_obj)) {
+        detection_window = PyFloat_AsDouble(detection_window_obj);
+    } else if (PyLong_Check(detection_window_obj)) {
+        detection_window = (double)PyLong_AsLong(detection_window_obj);
+    } else {
+        PyErr_SetString(PyExc_TypeError, "detection_window must be a float or int");
+        return NULL;
+    }
 
     if (PyErr_Occurred()) {
         return NULL;
@@ -103,7 +115,7 @@ static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObjec
         return PyErr_NoMemory();
     }
 
-    if (process_trajectories(trajectories, snooze_window, detection_window, result_list, verbosity) == -1) {
+    if (compute_metrics(trajectories, snooze_window, detection_window, result_list, verbosity) == -1) {
         Py_DECREF(result_list);
         return NULL;
     }
@@ -112,26 +124,21 @@ static PyObject* py_process_trajectories(PyObject* self, PyObject* args, PyObjec
 }
 
 // Method definitions
-static PyMethodDef ProcessTrajectoriesMethods[] = {
-    {"process_trajectories", (PyCFunction)py_process_trajectories, METH_VARARGS | METH_KEYWORDS, "Process trajectories and calculate metrics"},
+static PyMethodDef CtsevalMethods[] = {
+    {"compute_metrics_c", (PyCFunction)py_compute_metrics_c, METH_VARARGS | METH_KEYWORDS, "Process trajectories and calculate metrics"},
     {NULL, NULL, 0, NULL}
 };
 
 // Module definition
-static struct PyModuleDef process_trajectories_module = {
+static struct PyModuleDef ctseval_module = {
     PyModuleDef_HEAD_INIT,
-    "process_trajectories",
-    NULL,
+    "ctseval",
+    "Module for computing clinical time series metrics",
     -1,
-    ProcessTrajectoriesMethods
+    CtsevalMethods
 };
 
 // Module initialization
-PyMODINIT_FUNC PyInit_process_trajectories(void) {
-    PyObject *m = PyModule_Create(&process_trajectories_module);
-    if (m == NULL) {
-        return NULL;
-    }
-    
-    return m;
+PyMODINIT_FUNC PyInit__ctseval(void) {
+    return PyModule_Create(&ctseval_module);
 }
