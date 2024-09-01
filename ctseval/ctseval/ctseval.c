@@ -197,8 +197,31 @@ void compute_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, d
     int episode_tp = 0, episode_fp = 0, episode_fn = 0, episode_tn = 0;
     int prediction_tp = 0, prediction_fp = 0;
 
+    double previous_risk = -1.0;  // Initialize with an impossible risk value
+
     for (int i = 0; i < risk_scores_count; i++) {
         RiskScore *score = &risk_scores[i];
+
+        // Only process and append results if the risk score is different from the previous one
+        if (score->risk != previous_risk) {
+            episode_fn = event_occurs_count - episode_tp;
+            episode_tn = all_count - event_occurs_count - episode_fp;
+            // Push results on R
+            PyObject *result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
+                                            "threshold", score->risk,
+                                            "episode_tp", episode_tp,
+                                            "episode_fp", episode_fp,
+                                            "episode_tn", episode_tn,
+                                            "episode_fn", episode_fn,
+                                            "prediction_tp", prediction_tp,
+                                            "prediction_fp", prediction_fp);
+            PyList_Append(result_list, result_dict);
+            Py_DECREF(result_dict);  // Decrease reference count
+
+            // Set the previous risk to the current risk
+            previous_risk = score->risk;
+        }
+    
         if (score->within_window) {
             prediction_tp++;
             int found = 0;
@@ -238,23 +261,22 @@ void compute_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, d
                 if (!is_event_occurred) {
                     episode_fp++;
                 }
-            }
+            }   
         }
-
-        episode_fn = event_occurs_count - episode_tp;
-        episode_tn = all_count - event_occurs_count - episode_fp;
-
-        PyObject *result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
-                                              "threshold", score->risk,
-                                              "episode_tp", episode_tp,
-                                              "episode_fp", episode_fp,
-                                              "episode_tn", episode_tn,
-                                              "episode_fn", episode_fn,
-                                              "prediction_tp", prediction_tp,
-                                              "prediction_fp", prediction_fp);
-        PyList_Append(result_list, result_dict);
-        Py_DECREF(result_dict);  // Decrease reference count
     }
+    episode_fn = event_occurs_count - episode_tp;
+    episode_tn = all_count - event_occurs_count - episode_fp;
+    // Push final results with a large negative number as threshold
+    PyObject *final_result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
+                                    "threshold", -99999.0,
+                                    "episode_tp", episode_tp,
+                                    "episode_fp", episode_fp,
+                                    "episode_tn", episode_tn,
+                                    "episode_fn", episode_fn,
+                                    "prediction_tp", prediction_tp,
+                                    "prediction_fp", prediction_fp);
+    PyList_Append(result_list, final_result_dict);
+    Py_DECREF(final_result_dict);  // Decrease reference count
 
     free(event_occurs_episodes);
     free(all_episodes);
@@ -262,6 +284,8 @@ void compute_metrics_no_snooze(Trajectory *trajectories, int num_trajectories, d
     free(positive_prediction_episodes);
     free(negative_prediction_episodes);
 }
+
+
 int compute_metrics(PyObject *trajectories_obj, double snooze_window, double detection_window, PyObject *result_list, int verbosity) {
     int num_trajectories = PyList_Size(trajectories_obj);
     if (num_trajectories < 0) {
@@ -322,54 +346,61 @@ int compute_metrics(PyObject *trajectories_obj, double snooze_window, double det
         start = clock();
 
         int print_interval = risk_scores_count / 10;  // Print 10 updates
+        double previous_threshold = -1.0;  // Initialize with an impossible threshold value
+
         for (int t = 0; t < risk_scores_count; t++) {
             double threshold = risk_scores[t];
 
-            int episode_tp = 0;
-            int episode_fp = 0;
-            int episode_fn = 0;
-            int episode_tn = 0;
-            int prediction_tp = 0;
-            int prediction_fp = 0;
+            // Only process and append results if the threshold is different from the previous one
+            if (threshold != previous_threshold) {
+                int episode_tp = 0;
+                int episode_fp = 0;
+                int episode_fn = 0;
+                int episode_tn = 0;
+                int prediction_tp = 0;
+                int prediction_fp = 0;
 
-            for (int i = 0; i < num_trajectories; i++) {
-                Trajectory *traj = &trajectories[i];
+                for (int i = 0; i < num_trajectories; i++) {
+                    Trajectory *traj = &trajectories[i];
 
-                double positive_predictions[traj->len];
-                int positive_len;
-                get_valid_times(traj->predicted_times, traj->predicted_risks, traj->len, threshold, snooze_window, positive_predictions, &positive_len);
+                    double positive_predictions[traj->len];
+                    int positive_len;
+                    get_valid_times(traj->predicted_times, traj->predicted_risks, traj->len, threshold, snooze_window, positive_predictions, &positive_len);
 
-                if (traj->event_occurred) {
-                    int num_tp, num_fp;
-                    get_prediction_level_metrics(positive_predictions, positive_len, detection_window, traj->event_time, &num_tp, &num_fp);
+                    if (traj->event_occurred) {
+                        int num_tp, num_fp;
+                        get_prediction_level_metrics(positive_predictions, positive_len, detection_window, traj->event_time, &num_tp, &num_fp);
 
-                    if (num_tp == 0) {
-                        episode_fn++;
+                        if (num_tp == 0) {
+                            episode_fn++;
+                        } else {
+                            episode_tp++;
+                        }
+                        prediction_tp += num_tp;
+                        prediction_fp += num_fp;
                     } else {
-                        episode_tp++;
-                    }
-                    prediction_tp += num_tp;
-                    prediction_fp += num_fp;
-                } else {
-                    if (positive_len > 0) {
-                        prediction_fp += positive_len;
-                        episode_fp++;
-                    } else {
-                        episode_tn++;
+                        if (positive_len > 0) {
+                            prediction_fp += positive_len;
+                            episode_fp++;
+                        } else {
+                            episode_tn++;
+                        }
                     }
                 }
-            }
 
-            PyObject *result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
-                                                  "threshold", threshold,
-                                                  "episode_tp", episode_tp,
-                                                  "episode_fp", episode_fp,
-                                                  "episode_tn", episode_tn,
-                                                  "episode_fn", episode_fn,
-                                                  "prediction_tp", prediction_tp,
-                                                  "prediction_fp", prediction_fp);
-            PyList_Append(result_list, result_dict);
-            Py_DECREF(result_dict);
+                PyObject *result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
+                                                      "threshold", threshold,
+                                                      "episode_tp", episode_tp,
+                                                      "episode_fp", episode_fp,
+                                                      "episode_tn", episode_tn,
+                                                      "episode_fn", episode_fn,
+                                                      "prediction_tp", prediction_tp,
+                                                      "prediction_fp", prediction_fp);
+                PyList_Append(result_list, result_dict);
+                Py_DECREF(result_dict);
+
+                previous_threshold = threshold;  // Update the previous threshold
+            }
 
             // Print progress and time estimation
             if (t > 0 && t % print_interval == 0) {
@@ -382,6 +413,50 @@ int compute_metrics(PyObject *trajectories_obj, double snooze_window, double det
                        t + 1, risk_scores_count, progress * 100, estimated_remaining);
             }
         }
+
+        // Compute final metrics with the lowest possible threshold
+        int episode_tp = 0, episode_fp = 0, episode_fn = 0, episode_tn = 0;
+        int prediction_tp = 0, prediction_fp = 0;
+
+        for (int i = 0; i < num_trajectories; i++) {
+            Trajectory *traj = &trajectories[i];
+
+            double positive_predictions[traj->len];
+            int positive_len;
+            get_valid_times(traj->predicted_times, traj->predicted_risks, traj->len, -INFINITY, snooze_window, positive_predictions, &positive_len);
+
+            if (traj->event_occurred) {
+                int num_tp, num_fp;
+                get_prediction_level_metrics(positive_predictions, positive_len, detection_window, traj->event_time, &num_tp, &num_fp);
+
+                if (num_tp == 0) {
+                    episode_fn++;
+                } else {
+                    episode_tp++;
+                }
+                prediction_tp += num_tp;
+                prediction_fp += num_fp;
+            } else {
+                if (positive_len > 0) {
+                    prediction_fp += positive_len;
+                    episode_fp++;
+                } else {
+                    episode_tn++;
+                }
+            }
+        }
+
+        // Push final results with a large negative number as threshold
+        PyObject *final_result_dict = Py_BuildValue("{s:d, s:i, s:i, s:i, s:i, s:i, s:i}",
+                                    "threshold", -99999.0,
+                                    "episode_tp", episode_tp,
+                                    "episode_fp", episode_fp,
+                                    "episode_tn", episode_tn,
+                                    "episode_fn", episode_fn,
+                                    "prediction_tp", prediction_tp,
+                                    "prediction_fp", prediction_fp);
+        PyList_Append(result_list, final_result_dict);
+        Py_DECREF(final_result_dict);  // Decrease reference count
 
         free(risk_scores);
     }
