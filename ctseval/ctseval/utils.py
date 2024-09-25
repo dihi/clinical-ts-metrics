@@ -1,4 +1,37 @@
 import numpy as np
+import pandas as pd
+
+def _recall(metric: dict, total_positive_episodes: float) -> float:
+    """
+    Calculate recall for a single metric.
+
+    :param metric: A dictionary containing 'episode_tp'.
+    :param total_positive_episodes: The total number of positive episodes.
+    :return: The recall value.
+    """
+    return metric['episode_tp'] / total_positive_episodes
+
+def _precision(metric: dict) -> float:
+    """
+    Calculate precision for a single metric.
+
+    :param metric: A dictionary containing 'prediction_tp' and 'prediction_fp'.
+    :return: The precision value or None if division by zero occurs.
+    """
+    try:
+        return metric['prediction_tp'] / (metric['prediction_tp'] + metric['prediction_fp'])
+    except ZeroDivisionError:
+        return None
+
+def _fpr(metric: dict, total_negative_episodes: float) -> float:
+    """
+    Calculate false positive rate for a single metric.
+
+    :param metric: A dictionary containing 'episode_fp' and 'episode_tn'.
+    :param total_negative_episodes: The total number of negative episodes.
+    :return: The false positive rate.
+    """
+    return metric['episode_fp'] / total_negative_episodes
 
 def validate_trajectories_schema(trajectories):
     required_keys = {'predicted_times', 'predicted_risks', 'event_occurred', 'event_time'}
@@ -30,39 +63,178 @@ def validate_trajectories_schema(trajectories):
         
     return True
 
-def calculate_average_precision(results):
+def auprc_score(metrics: list[dict]) -> float:
     """
-    Calculate the average precision from the results of compute_metrics_c.
-    
-    Args:
-    results (list): List of dictionaries containing metrics at different thresholds.
-    
-    Returns:
-    float: The calculated average precision.
+    Compute the area under the precision-recall curve, using the lower trapezoidal estimator, which is a point-estimator for the area under the precision-recall curve.
+    This is chosen due to its performance as an estimator as described in Boyd(2013) and its ability to be computed even when the precision-recall is not necessarily monotonic.
+
+    :param metrics: A list of metric dictionaries.
+    :return: The average precision score.
     """
-    precisions = []
-    recalls = []
-    
-    for result in results:
-        tp = result['episode_tp']
-        fp = result['episode_fp']
-        fn = result['episode_fn']
+    recall_precision_dict = {}
+    total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
+    for m in metrics:
+        # Compute recall value
+        r = _recall(m, total_positive_episodes)
         
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        
-        precisions.append(precision)
-        recalls.append(recall)
-    
+        # Compute precision value
+        p = _precision(m)
+
+        if p is not None:
+            if r not in recall_precision_dict:
+                recall_precision_dict[r] = {'pmin': p, 'pmax': p}
+            else:
+                recall_precision_dict[r]['pmin'] = min(recall_precision_dict[r]['pmin'], p)
+                recall_precision_dict[r]['pmax'] = max(recall_precision_dict[r]['pmax'], p)
     # Sort by recall
-    sorted_pairs = sorted(zip(recalls, precisions), key=lambda x: x[0])
-    recalls, precisions = zip(*sorted_pairs)
+    sorted_recalls = sorted(recall_precision_dict.keys())
+    precisions_min = [recall_precision_dict[r]['pmin'] for r in sorted_recalls]
+    precisions_max = [recall_precision_dict[r]['pmax'] for r in sorted_recalls]
+
+    ap_sum = 0
+    for i in range(0, len(sorted_recalls)-1):
+        ap_sum += (precisions_min[i] + precisions_max[i+1])/ 2 * (sorted_recalls[i+1] - sorted_recalls[i])
+
+    return ap_sum
+
+def precision_recall_curve(metrics: list[dict]) -> tuple[list[float], list[float]]:
+    """
+    Generate the precision-recall curve data.
+
+    :param metrics: A list of metric dictionaries.
+    :return: A tuple containing two lists: recalls and precisions.
+    """
+    xs = []
+    ys = []
+    total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
     
-    # Calculate the area under the precision-recall curve
-    ap = 0
-    prev_recall = 0
-    for recall, precision in zip(recalls, precisions):
-        ap += precision * (recall - prev_recall)
-        prev_recall = recall
+    for m in metrics:
+        curr_prec = _precision(m)
+        if curr_prec is not None:
+            curr_recall = _recall(m, total_positive_episodes)
+            xs.append(curr_recall)
+            ys.append(curr_prec)
+    return xs, ys
+
+def recall_at_fixed_precision(metrics: list[dict], target_precision: float) -> float:
+    """
+    Find the closest recall value at the specified precision.
+
+    :param metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
+    :param target_precision: The precision value to find the closest recall for.
+    :return: The recall value closest to the specified precision, or None if not found.
+    """
+    total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
+
+    closest_recall = None
+    smallest_diff = float('inf')
+
+    for m in metrics:
+        curr_prec = _precision(m)
+        if curr_prec is not None:
+            diff = abs(curr_prec - target_precision)
+            if diff < smallest_diff:
+                smallest_diff = diff
+                closest_recall = _recall(m, total_positive_episodes)
+
+    return closest_recall
+
+def precision_at_fixed_recall(metrics: list[dict], target_recall: float) -> float:
+    """
+    Find the closest precision value at the specified recall.
+
+    :param metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
+    :param target_recall: The recall value to find the closest precision for.
+    :return: The precision value closest to the specified recall, or None if not found.
+    """
+    total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
+
+    closest_precision = None
+    smallest_diff = float('inf')
+
+    for m in metrics:
+        curr_prec = _precision(m)
+        if curr_prec is not None:
+            curr_recall = _recall(m, total_positive_episodes)
+            diff = abs(curr_recall - target_recall)
+            if diff < smallest_diff:
+                smallest_diff = diff
+                closest_precision = curr_prec
+
+    return closest_precision
+
+def roc_curve(metrics: list[dict]) -> tuple[list[float], list[float]]:
+    """
+    Generate the ROC curve data.
+
+    :param metrics: A list of metric dictionaries.
+    :return: A tuple containing two lists: false positive rates and true positive rates.
+    """
+    fprs = []
+    tprs = []
+    total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
+    total_negative_episodes = metrics[-1]['episode_fp'] + metrics[-1].get('episode_tn', 0)
+
+    for m in metrics:
+        curr_tpr = _recall(m, total_positive_episodes)
+        curr_fpr = _fpr(m, total_negative_episodes)
+        fprs.append(curr_fpr)
+        tprs.append(curr_tpr)
+    return fprs, tprs
+
+def _calculate_trapezoid_area(x1: float, x2: float, y1: float, y2: float) -> float:
+    """
+    Calculate the area of a trapezoid.
+
+    :param x1: x-coordinate of the first point
+    :param x2: x-coordinate of the second point
+    :param y1: y-coordinate of the first point
+    :param y2: y-coordinate of the second point
+    :return: Area of the trapezoid
+    """
+    return 0.5 * (x2 - x1) * (y1 + y2)
+
+def auroc_score(metrics: list[dict]) -> float:
+    """
+    Compute the Area Under the ROC Curve (AUROC).
+
+    :param metrics: A list of metric dictionaries.
+    :return: The AUROC value.
+    """
+    fprs, tprs = roc_curve(metrics)
+    # Sort the FPR and TPR for proper integration
+    sorted_pairs = sorted(zip(fprs, tprs))
+    sorted_fprs, sorted_tprs = zip(*sorted_pairs)
+
+    # Compute the Area Under the Curve using the trapezoidal rule
+    auroc = 0.0
+    for i in range(1, len(sorted_fprs)):
+        auroc += _calculate_trapezoid_area(sorted_fprs[i-1], sorted_fprs[i], sorted_tprs[i-1], sorted_tprs[i])
+
+    return auroc
+
+def extract_attributes(groupbydf, event_occurred_col, 
+                       event_time_col, predicted_times_col, 
+                       predicted_risks_col):
+    result_dict = {}
+    result_dict['event_occurred'] = bool(groupbydf[event_occurred_col].iloc[0])
+    result_dict['event_time'] = groupbydf[event_time_col].iloc[0]
+    result_dict['predicted_times'] = groupbydf[predicted_times_col].tolist()
+    result_dict['predicted_risks'] = groupbydf[predicted_risks_col].tolist()
+    return result_dict
     
-    return ap
+def convert_df_to_trajectory_list(df, episode_id_col, 
+                                  event_occurred_col, event_time_col, 
+                                  predicted_times_col, predicted_risks_col):
+    """
+    Returns
+    -------
+    traj_list: List[Dict]
+        Returns a list of dictionaries which contain the information necessary to generate metrics
+    """
+    traj_list = []
+    for i, df in df.groupby(episode_id_col):
+        traj_list.append(extract_attributes(df, event_occurred_col,
+                                            event_time_col, predicted_times_col,
+                                            predicted_risks_col))
+    return traj_list

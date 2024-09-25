@@ -1,4 +1,4 @@
-from .utils import validate_trajectories_schema, calculate_average_precision
+from .utils import (validate_trajectories_schema, auprc_score, precision_recall_curve, recall_at_fixed_precision, precision_at_fixed_recall, roc_curve, precision_recall_curve, auroc_score)
 from ._ctseval import compute_metrics_c
 
 def compute_metrics(trajectories: list[dict], snooze_window: float, detection_window: float, verbosity=1) -> list[dict]:
@@ -29,4 +29,4 @@ def compute_metrics(trajectories: list[dict], snooze_window: float, detection_wi
     results = compute_metrics_c(trajectories, snooze_window, detection_window, verbosity)
     return results
 
-__all__ = ['compute_metrics', 'validate_trajectories_schema', 'calculate_average_precision']
+__all__ = ['compute_metrics', 'validate_trajectories_schema', 'auprc_score', 'precision_recall_curve', 'recall_at_fixed_precision', 'precision_at_fixed_recall', 'roc_curve', 'auroc_score']
