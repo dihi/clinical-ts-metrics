@@ -1,22 +1,25 @@
-import numpy as np
 import pandas as pd
 
 def _recall(metric: dict, total_positive_episodes: float) -> float:
     """
     Calculate recall for a single metric.
-
-    :param metric: A dictionary containing 'episode_tp'.
-    :param total_positive_episodes: The total number of positive episodes.
-    :return: The recall value.
+    
+    Args:
+        metric: A dictionary (obtained from compute_metrics) containing 'episode_tp'.
+        total_positive_episodes: The total number of positive episodes.
+    Returns:
+        The recall value.
     """
     return metric['episode_tp'] / total_positive_episodes
 
 def _precision(metric: dict) -> float:
     """
     Calculate precision for a single metric.
-
-    :param metric: A dictionary containing 'prediction_tp' and 'prediction_fp'.
-    :return: The precision value or None if division by zero occurs.
+    
+    Args:
+        metric: A dictionary (obtained from compute_metrics) containing 'prediction_tp' and 'prediction_fp'.
+    Returns:
+        The precision value or None if division by zero occurs.
     """
     try:
         return metric['prediction_tp'] / (metric['prediction_tp'] + metric['prediction_fp'])
@@ -27,13 +30,23 @@ def _fpr(metric: dict, total_negative_episodes: float) -> float:
     """
     Calculate false positive rate for a single metric.
 
-    :param metric: A dictionary containing 'episode_fp' and 'episode_tn'.
-    :param total_negative_episodes: The total number of negative episodes.
-    :return: The false positive rate.
+    Args:
+        metric: A dictionary (obtained from compute_metrics) containing 'episode_fp' and 'episode_tn'.
+        total_negative_episodes: The total number of negative episodes.
+    Returns:
+        The false positive rate.
     """
     return metric['episode_fp'] / total_negative_episodes
 
-def validate_trajectories_schema(trajectories):
+def validate_trajectories_schema(trajectories: list[dict]):
+    """
+    Validate the schema of a list of trajectory dictionaries.
+
+    Args:
+        trajectories: A list of trajectory dictionaries.
+    Raises:
+        ValueError: If the schema is invalid.
+    """
     required_keys = {'predicted_times', 'predicted_risks', 'event_occurred', 'event_time'}
     
     for traj in trajectories:
@@ -68,8 +81,10 @@ def auprc_score(metrics: list[dict]) -> float:
     Compute the area under the precision-recall curve, using the lower trapezoidal estimator, which is a point-estimator for the area under the precision-recall curve.
     This is chosen due to its performance as an estimator as described in Boyd(2013) and its ability to be computed even when the precision-recall is not necessarily monotonic.
 
-    :param metrics: A list of metric dictionaries.
-    :return: The average precision score.
+    Args:
+        metrics: A list of metric dictionaries.
+    Returns:
+        The average precision score.
     """
     recall_precision_dict = {}
     total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
@@ -99,10 +114,12 @@ def auprc_score(metrics: list[dict]) -> float:
 
 def precision_recall_curve(metrics: list[dict]) -> tuple[list[float], list[float]]:
     """
-    Generate the precision-recall curve data.
+    Generate the precision-recall curve data. Note that this may alias sklearn.metrics.precision_recall_curve.
 
-    :param metrics: A list of metric dictionaries.
-    :return: A tuple containing two lists: recalls and precisions.
+    Args:
+        metrics: A list of metric dictionaries.
+    Returns:
+        A tuple containing two lists: recalls and precisions.
     """
     xs = []
     ys = []
@@ -120,9 +137,11 @@ def recall_at_fixed_precision(metrics: list[dict], target_precision: float) -> f
     """
     Find the closest recall value at the specified precision.
 
-    :param metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
-    :param target_precision: The precision value to find the closest recall for.
-    :return: The recall value closest to the specified precision, or None if not found.
+    Args:
+        metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
+        target_precision: The precision value to find the closest recall for.
+    Returns:
+        The recall value closest to the specified precision, or None if not found.
     """
     total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
 
@@ -143,9 +162,11 @@ def precision_at_fixed_recall(metrics: list[dict], target_recall: float) -> floa
     """
     Find the closest precision value at the specified recall.
 
-    :param metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
-    :param target_recall: The recall value to find the closest precision for.
-    :return: The precision value closest to the specified recall, or None if not found.
+    Args:
+        metrics: List of dictionaries containing 'episode_tp', 'episode_fp', 'episode_fn', and 'prediction_tp'.
+        target_recall: The recall value to find the closest precision for.
+    Returns:
+        The precision value closest to the specified recall, or None if not found.
     """
     total_positive_episodes = metrics[-1]['episode_tp'] + metrics[-1]['episode_fn']
 
@@ -167,8 +188,10 @@ def roc_curve(metrics: list[dict]) -> tuple[list[float], list[float]]:
     """
     Generate the ROC curve data.
 
-    :param metrics: A list of metric dictionaries.
-    :return: A tuple containing two lists: false positive rates and true positive rates.
+    Args:
+        metrics: A list of metric dictionaries. Note that this may alias sklearn.metrics.roc_curve.
+    Returns:
+        A tuple containing two lists: false positive rates and true positive rates.
     """
     fprs = []
     tprs = []
@@ -186,11 +209,13 @@ def _calculate_trapezoid_area(x1: float, x2: float, y1: float, y2: float) -> flo
     """
     Calculate the area of a trapezoid.
 
-    :param x1: x-coordinate of the first point
-    :param x2: x-coordinate of the second point
-    :param y1: y-coordinate of the first point
-    :param y2: y-coordinate of the second point
-    :return: Area of the trapezoid
+    Args:
+        x1: x-coordinate of the first point
+        x2: x-coordinate of the second point
+        y1: y-coordinate of the first point
+        y2: y-coordinate of the second point
+    Returns:
+        Area of the trapezoid
     """
     return 0.5 * (x2 - x1) * (y1 + y2)
 
@@ -198,8 +223,10 @@ def auroc_score(metrics: list[dict]) -> float:
     """
     Compute the Area Under the ROC Curve (AUROC).
 
-    :param metrics: A list of metric dictionaries.
-    :return: The AUROC value.
+    Args:
+        metrics: A list of metric dictionaries.
+    Returns:
+        The AUROC value.
     """
     fprs, tprs = roc_curve(metrics)
     # Sort the FPR and TPR for proper integration
@@ -213,9 +240,23 @@ def auroc_score(metrics: list[dict]) -> float:
 
     return auroc
 
-def extract_attributes(groupbydf, event_occurred_col, 
-                       event_time_col, predicted_times_col, 
-                       predicted_risks_col):
+def _extract_attributes(groupbydf:pd.core.groupby.generic.DataFrameGroupBy,
+                        event_occurred_col:str, 
+                        event_time_col:str, 
+                        predicted_times_col:str, 
+                        predicted_risks_col:str) -> dict:
+    """
+    Extract attributes from a grouped dataframe. A helper function used for converting a dataframe to a list of trajectories.
+
+    Args:
+        groupbydf: A dataframe grouped by episode_id.
+        event_occurred_col: The column name for event occurrence.
+        event_time_col: The column name for event time.
+        predicted_times_col: The column name for predicted times.
+        predicted_risks_col: The column name for predicted risks.
+    Returns:
+        A dictionary containing the extracted attributes.
+    """
     result_dict = {}
     result_dict['event_occurred'] = bool(groupbydf[event_occurred_col].iloc[0])
     result_dict['event_time'] = groupbydf[event_time_col].iloc[0]
@@ -223,18 +264,26 @@ def extract_attributes(groupbydf, event_occurred_col,
     result_dict['predicted_risks'] = groupbydf[predicted_risks_col].tolist()
     return result_dict
     
-def convert_df_to_trajectory_list(df, episode_id_col, 
-                                  event_occurred_col, event_time_col, 
-                                  predicted_times_col, predicted_risks_col):
+def convert_df_to_trajectory_list(df:pd.DataFrame, 
+                                  episode_id_col:str, 
+                                  event_occurred_col:str, 
+                                  event_time_col:str, 
+                                  predicted_times_col:str, 
+                                  predicted_risks_col:str) -> list[dict]:
     """
-    Returns
-    -------
-    traj_list: List[Dict]
-        Returns a list of dictionaries which contain the information necessary to generate metrics
+    Convert a dataframe to a list of trajectory dictionaries.
+
+    Args:
+        df: A dataframe.
+        episode_id_col: The column name for episode id.
+        event_occurred_col: The column name for event occurrence.
+        event_time_col: The column name for event time.
+        predicted_times_col: The column name for predicted times.
+        predicted_risks_col: The column name for predicted risks.
+    Returns:
+        A list of trajectory dictionaries.
     """
     traj_list = []
     for i, df in df.groupby(episode_id_col):
-        traj_list.append(extract_attributes(df, event_occurred_col,
-                                            event_time_col, predicted_times_col,
-                                            predicted_risks_col))
+        traj_list.append(_extract_attributes(df, event_occurred_col, event_time_col, predicted_times_col, predicted_risks_col))
     return traj_list

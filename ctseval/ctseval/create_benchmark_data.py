@@ -1,33 +1,7 @@
 import pandas as pd 
 import numpy as np
 import json
-
-
-def extract_attributes(groupbydf, event_occurred_col, 
-                       event_time_col, predicted_times_col, 
-                       predicted_risks_col):
-    result_dict = {}
-    result_dict['event_occurred'] = bool(groupbydf[event_occurred_col].iloc[0])
-    result_dict['event_time'] = groupbydf[event_time_col].iloc[0]
-    result_dict['predicted_times'] = groupbydf[predicted_times_col].tolist()
-    result_dict['predicted_risks'] = groupbydf[predicted_risks_col].tolist()
-    return result_dict
-    
-def convert_df_to_trajectory_list(df, episode_id_col, 
-                                  event_occurred_col, event_time_col, 
-                                  predicted_times_col, predicted_risks_col):
-    """
-    Returns
-    -------
-    traj_list: List[Dict]
-        Returns a list of dictionaries which contain the information necessary to generate metrics
-    """
-    traj_list = []
-    for i, df in df.groupby(episode_id_col):
-        traj_list.append(extract_attributes(df, event_occurred_col,
-                                            event_time_col, predicted_times_col,
-                                            predicted_risks_col))
-    return traj_list
+from .utils import _extract_attributes, convert_df_to_trajectory_list
 
 
 if __name__ == '__main__':
